@@ -7,9 +7,11 @@ import com.example.application.domain.entities.UpdateEntryCommand;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
 import com.vaadin.flow.component.contextmenu.MenuItem;
 import com.vaadin.flow.component.contextmenu.SubMenu;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.contextmenu.GridContextMenu;
 import com.vaadin.flow.component.menubar.MenuBar;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -37,16 +39,12 @@ public class MainView extends VerticalLayout implements ApplicationContextAware 
     private void render() {
 
         MenuBar menuBar = new MenuBar();
-        ComponentEventListener<ClickEvent<MenuItem>> listener = new ComponentEventListener<ClickEvent<MenuItem>>() {
-            @Override
-            public void onComponentEvent(ClickEvent<MenuItem> event) {
-
-                getUI().ifPresent(ui -> ui.getPage().setLocation("/backoffice"));
-            }
-        };
+        ComponentEventListener<ClickEvent<MenuItem>> listener =
+                event -> getUI().ifPresent(ui -> ui.getPage().setLocation("/backoffice"));
 
         menuBar.addItem("View", listener);
         menuBar.addItem("Edit", listener);
+
 
         MenuItem share = menuBar.addItem("Share");
         SubMenu shareSubMenu = share.getSubMenu();
@@ -64,6 +62,11 @@ public class MainView extends VerticalLayout implements ApplicationContextAware 
         moveSubMenu.addItem("To trash", listener);
 
         menuBar.addItem("Duplicate", listener);
+
+        menuBar.addItem("Logoff", (ComponentEventListener<ClickEvent<MenuItem>>) event -> {
+            applicationContext.getBean(SecurityService.class)
+                    .logout();
+        });
 
         add(menuBar);
 
@@ -106,6 +109,13 @@ public class MainView extends VerticalLayout implements ApplicationContextAware 
         grid.addComponentColumn(this::buildEditButton).setWidth("10%");
         grid.setWidth("80%");
 
+        GridContextMenu<BlogEntry> contextMenu = grid.addContextMenu();
+        contextMenu.addItem("Delete",
+                event -> Optional.ofNullable(event.getItem())
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .ifPresent(this::delete));
+
         Collection<BlogEntry> blogEntries = blogService.list();
         grid.setItems(blogEntries);
         add(grid);
@@ -130,9 +140,17 @@ public class MainView extends VerticalLayout implements ApplicationContextAware 
     }
 
     private void delete(BlogEntry blogEntry) {
-        BlogService blogService = applicationContext.getBean(BlogService.class);
-        blogService.delete(blogEntry);
-        grid.setItems(blogService.list());
+
+        ConfirmDialog confirmDialog = new ConfirmDialog("Delete blog entry",
+                "Do you want to delete this blog entry?",
+                "Delete",
+                event -> {
+                    BlogService blogService = applicationContext.getBean(BlogService.class);
+                    blogService.delete(blogEntry);
+                    grid.setItems(blogService.list());
+                });
+        confirmDialog.setCancelable(true);
+        confirmDialog.open();
     }
 
     @Override
